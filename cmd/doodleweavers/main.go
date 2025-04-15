@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/websocket"
+	"github.com/vrnraju/doodle-weavers/internal/hub"
 )
 
 var upgrader = websocket.Upgrader{
@@ -15,34 +16,38 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func handleConnections(w http.ResponseWriter, r *http.Request) {
-	log.Println("Received connection attempt...")
-	ws, err := upgrader.Upgrade(w, r, nil)
+func serveWs(hubInstance *hub.Hub, w http.ResponseWriter, r *http.Request) {
+	log.Println("Received connection attempt")
+	roomId := "lobby"
+	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("Failed to upgrade Connc")
+		log.Printf("Failed to upgrade Connc for room %s", roomId)
 		return
 	}
-	defer ws.Close()
-	log.Println("Client Connected!!")
+
+	log.Printf("websocket connection opened for room %s", roomId)
+	defer conn.Close()
+	client := &hub.Client{}
+	room := hubInstance.FindOrCreateRoom(roomId)
 
 	for {
-		messageType, message, err := ws.ReadMessage()
+		messageType, message, err := conn.ReadMessage()
 		if err != nil {
-			log.Println("Read error:", err)
+			log.Printf("Failed to read message from client in room %s", roomId)
 			break
 		}
-		err = ws.WriteMessage(messageType, message)
-		if err != nil {
-			log.Println("Write error:", err)
-			break
-		}
+		log.Printf("TEMP: Message from %p in room %s: type=%d, msg=%s", client, room.Id, messageType, message)
+
 	}
-	log.Println("Websocket connection closed. ")
 
 }
+
 func main() {
 	//first
-	http.HandleFunc("/ws", handleConnections)
+	hubInstance := hub.NewHub()
+	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		serveWs(hubInstance, w, r)
+	})
 	serverAddress := ":8080"
 	log.Printf("Starting Doodle Weavers server on %s\n", serverAddress)
 
